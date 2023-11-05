@@ -1,0 +1,61 @@
+main {
+  max-width: 800px;
+  width: 100%;
+  padding-top: 1em;
+}
+
+.input {
+  display: flex;
+
+  & .section-picker {
+    flex: 1;
+  }
+
+  & input[name=station] {
+    width: 100%;
+  }
+
+  & input[type=radio] {
+    display: none;
+  }
+
+  & label {
+    margin-left: 1em;
+  }
+}
+
+.trains {
+  .line {
+    border-radius: .2em;
+    border: 2px solid currentColor;
+    padding: 0 .25em;
+    margin-right: .4em;
+  }
+}
+
+.cars {
+  text-align: center;
+
+  & .car {
+    display: inline-block;
+    margin: .2em;
+
+    & .icon {
+      color: white;
+
+      & svg, & .car-number {
+        width: 3em;
+      }
+
+      & .car-number {
+        position: absolute;
+        margin-top: 0.15em;
+      }
+
+      &.v0 path { fill: #09d105; }
+      &.v1 path { fill: #c6c612; }
+      &.v2 path { fill: #e3270e; }
+      &.v3 path { fill: #0f0f0f; }
+    }
+  }
+}
