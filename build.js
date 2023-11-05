@@ -25,7 +25,7 @@ const config = {
   publicPath: "/",
 };
 
-prepareData();
+await prepareData();
 
 if (dev) {
   const context = await esbuild.context(config);
