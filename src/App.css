@@ -4,6 +4,10 @@ main {
   padding: 1em;
 }
 
+.error {
+  color: #a92507;
+}
+
 .input {
   display: flex;
 

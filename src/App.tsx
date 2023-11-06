@@ -1,4 +1,4 @@
-import { Accessor, For, Match, Show, Switch, createContext, createEffect, createMemo, createResource, createSignal, onCleanup, useContext } from "solid-js";
+import { Accessor, ErrorBoundary, For, Match, Show, Switch, createContext, createEffect, createMemo, createResource, createSignal, onCleanup, useContext } from "solid-js";
 import { StationInfo, stations } from "./data";
 import "./App.css";
 
@@ -47,14 +47,19 @@ function useNow() {
 
 async function fetchUpcomingTrains(station: StationInfo) {
   const resp = await fetch(`https://fetch-subway.gsq.workers.dev/upcoming/${station.id}`);
+  if (!resp.ok) {
+    throw new Error(await resp.text());
+  }
   const json: readonly Train[] = await resp.json();
 
   return json;
 }
 
 async function fetchCongestion({ language, line, train }: { language: Language, line: string, train: string }) {
-  const resp = await fetch(
-      `https://fetch-subway.gsq.workers.dev/congestion/${line}/${train}`);
+  const resp = await fetch(`https://fetch-subway.gsq.workers.dev/congestion/${line}/${train}`);
+  if (!resp.ok) {
+    throw new Error(await resp.text());
+  }
   const json: readonly number[] = await resp.json();
 
   return json
@@ -80,33 +85,35 @@ function Train(props: { line: string, lineName: string, train: string, eta: numb
         {language().formatSeconds((now().valueOf() - eta()) / 1e3 | 0)}
       </div>
 
-      <div class="cars">
-        <For each={congestion()}>
-          {({ car, value, label }, index) => (
-            <div class="car">
-              <div class={`icon v${value}`}>
-                <div class="car-number">{car}</div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
-                  <Switch>
-                    <Match when={index() == 0}>
-                      <path d="M20 0 L180 0 Q200 0, 200 20 L200 90 Q200 100, 190 100 L10 100 Q0 100, 0 90 L0 80 Q10 0, 60 0" />
-                    </Match>
+      <ErrorBoundary fallback={(e) => <span class="error">{`${e?.message ?? e}`}</span>}>
+        <div class="cars">
+          <For each={congestion()}>
+            {({ car, value, label }, index) => (
+              <div class="car">
+                <div class={`icon v${value}`}>
+                  <div class="car-number">{car}</div>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+                    <Switch>
+                      <Match when={index() == 0}>
+                        <path d="M20 0 L180 0 Q200 0, 200 20 L200 90 Q200 100, 190 100 L10 100 Q0 100, 0 90 L0 80 Q10 0, 60 0" />
+                      </Match>
 
-                    <Match when={index() == congestion().length - 1}>
-                      <path d="M20 0 L140 0 Q190 0, 200 80 L200 90 Q200 100, 190 100 L10 100 Q0 100, 0 90 L0 20 Q0 0, 20 0" />
-                    </Match>
+                      <Match when={index() == congestion().length - 1}>
+                        <path d="M20 0 L140 0 Q190 0, 200 80 L200 90 Q200 100, 190 100 L10 100 Q0 100, 0 90 L0 20 Q0 0, 20 0" />
+                      </Match>
 
-                    <Match when={true}>
-                      <path d="M20 0 L180 0 Q200 0, 200 20 L200 90 Q200 100, 190 100 L10 100 Q0 100, 0 90 L0 20 Q0 0, 20 0" />
-                    </Match>
-                  </Switch>
-                </svg>
+                      <Match when={true}>
+                        <path d="M20 0 L180 0 Q200 0, 200 20 L200 90 Q200 100, 190 100 L10 100 Q0 100, 0 90 L0 20 Q0 0, 20 0" />
+                      </Match>
+                    </Switch>
+                  </svg>
+                </div>
+                <span>{label}</span>
               </div>
-              <span>{label}</span>
-            </div>
-          )}
-        </For>
-      </div>
+            )}
+          </For>
+        </div>
+      </ErrorBoundary>
     </div>
   );
 }
@@ -170,7 +177,9 @@ function Station(props: { station: StationInfo }) {
     <div class="station">
       <h2>{props.station[language().id]}</h2>
 
-      <TrainsByDirection trains={trains()} />
+      <ErrorBoundary fallback={(e) => <span class="error">{`${e?.message ?? e}`}</span>}>
+        <TrainsByDirection trains={trains()} />
+      </ErrorBoundary>
     </div>
   );
 }
