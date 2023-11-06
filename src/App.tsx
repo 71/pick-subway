@@ -1,4 +1,4 @@
-import { Accessor, For, Match, Switch, createContext, createEffect, createMemo, createResource, createSignal, onCleanup, useContext } from "solid-js";
+import { Accessor, For, Match, Show, Switch, createContext, createEffect, createMemo, createResource, createSignal, onCleanup, useContext } from "solid-js";
 import { StationInfo, stations } from "./data";
 import "./App.css";
 
@@ -46,8 +46,7 @@ function useNow() {
 }
 
 async function fetchUpcomingTrains(station: StationInfo) {
-  const resp = await fetch(
-      `https://fetch-subway.gsq.workers.dev/upcoming/${station.ko}`);
+  const resp = await fetch(`https://fetch-subway.gsq.workers.dev/upcoming/${station.id}`);
   const json: readonly Train[] = await resp.json();
 
   return json;
@@ -205,11 +204,49 @@ function LanguagePicker(props: { language: Language, setLanguage(value: Language
 
 function StationPicker(props: { searchInput: string, setSearchInput(value: string): void }) {
   const language = useContext(LanguageContext)!;
+  const [coords] = createResource(() => new Promise<GeolocationCoordinates | undefined>((resolve, reject) => {
+    return resolve(undefined);
+
+    // TODO: add prompt for geolocation
+    navigator.geolocation.getCurrentPosition((geolocation) => resolve(geolocation.coords), reject, {
+      enableHighAccuracy: false,
+      maximumAge: 60_000,
+      timeout: 20_000,
+    });
+  }));
+  const sortedStations = createMemo(() => {
+    const prop = language().id;
+    const loadedCoords = coords();
+
+    if (loadedCoords === undefined) {
+      return stations;
+    }
+
+    const { latitude, longitude } = loadedCoords;
+    const distanceToCurrentLocation = (coords?: { lat: number, lng: number }) => {
+      if (coords === undefined) {
+        return 100;
+      }
+      return Math.sqrt(Math.pow(latitude - coords.lat, 2) + Math.pow(longitude - coords.lng, 2));
+    };
+    const sortedStations = [...stations].filter((station) => station[prop] !== undefined);
+
+    sortedStations.sort((a, b) => {
+      const aDistance = distanceToCurrentLocation(a.coords);
+      const bDistance = distanceToCurrentLocation(b.coords);
+      if (aDistance !== bDistance) {
+        return aDistance - bDistance;
+      }
+      return a[prop]!.localeCompare(b[prop]!);
+    });
+
+    return sortedStations;
+  });
 
   return (
     <div class="section-picker">
       <datalist id="stations">
-        <For each={stations}>
+        <For each={sortedStations()}>
           {(station) => <option value={station[language().id]} />}
         </For>
       </datalist>
@@ -224,8 +261,21 @@ export function App() {
   const SEARCH_KEY = "search";
   const LANGUAGE_KEY = "lang";
 
-  const [searchInput, setSearchInput] = createSignal(localStorage.getItem(SEARCH_KEY) ?? "");
-  const [language, setLanguage] = createSignal(defaultLanguage(localStorage.getItem(LANGUAGE_KEY) ?? ""));
+  // [...new Set(stations.flatMap(x => [...(x.ko + x.en + x.jp + x.ch)]))].sort().join("")
+  const FORBIDDEN_CHARACTERS = /[^\p{L}0-9()&.·'‘’•∙・ -]/ug;
+  const HASH_RE = /^\/(en|ko)\/([\p{L}0-9()&.·'‘’•∙・ -]+)$/u;
+
+  const hashData = HASH_RE.exec(location.hash);
+
+  if (hashData === null) {
+    location.hash = "";
+  }
+
+  let initialLanguage = hashData?.[1] ?? localStorage.getItem(LANGUAGE_KEY) ?? "";
+  let initialSearchInput = hashData?.[2] ?? localStorage.getItem(SEARCH_KEY) ?? "";
+
+  const [language, setLanguage] = createSignal(defaultLanguage(initialLanguage));
+  const [searchInput, setSearchInput] = createSignal(initialSearchInput);
 
   createEffect(() => localStorage.setItem(SEARCH_KEY, searchInput()));
   createEffect(() => localStorage.setItem(LANGUAGE_KEY, language().id));
@@ -237,15 +287,30 @@ export function App() {
     return stations.find((x) => x[lang] === needle);
   });
 
+  createEffect(() => {
+    if (searchInput().length === 0) {
+      history.replaceState(null, document.title, ".");
+    } else {
+      location.hash = `/${language().id}/${searchInput().replace(FORBIDDEN_CHARACTERS, "")}`;
+    }
+  });
+
+  const setLanguageKeepStation = (newLanguage: Language) => {
+    setSearchInput(selectedStation()?.[newLanguage.id] ?? "");
+    setLanguage(newLanguage);
+  };
+
   return (
     <LanguageContext.Provider value={language}>
       <main>
         <div class="input">
           <StationPicker searchInput={searchInput()} setSearchInput={setSearchInput} />
-          <LanguagePicker language={language()} setLanguage={setLanguage} />
+          <LanguagePicker language={language()} setLanguage={setLanguageKeepStation} />
         </div>
 
-        {selectedStation() !== undefined && <Station station={selectedStation()!} />}
+        <Show when={selectedStation() !== undefined}>
+          <Station station={selectedStation()!} />
+        </Show>
       </main>
     </LanguageContext.Provider>
   );
