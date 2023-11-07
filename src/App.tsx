@@ -1,4 +1,4 @@
-import { Accessor, ErrorBoundary, For, Match, Show, Switch, createContext, createEffect, createMemo, createResource, createSignal, onCleanup, useContext } from "solid-js";
+import { Accessor, ErrorBoundary, For, Match, Resource, Show, Switch, createContext, createEffect, createMemo, createResource, createSignal, onCleanup, useContext } from "solid-js";
 import { StationInfo, stations } from "./data";
 import "./App.css";
 
@@ -66,6 +66,22 @@ async function fetchCongestion({ language, line, train }: { language: Language, 
     .map((congestionId, i) => ({ car: i + 1, value: congestionId, label: language.congestionLabels[congestionId] }));
 }
 
+function errorHandler<T>(resource: Resource<T>) {
+  const [resetError, setResetError] = createSignal<() => void>();
+
+  createEffect(() => {
+    if (resource.error == null && resetError() !== undefined) {
+      resetError()!();
+    }
+  });
+
+  return (e: unknown, resetError: () => void) => {
+    setResetError(() => resetError);
+
+    return (<span class="error">{`${(e as Error | undefined)?.message ?? e}`}</span>);
+  };
+}
+
 function Train(props: { line: string, lineName: string, train: string, eta: number, etaMessage: string }) {
   const language = useContext(LanguageContext)!;
   const [expanded, setExpanded] = createSignal(false);
@@ -80,12 +96,11 @@ function Train(props: { line: string, lineName: string, train: string, eta: numb
   return (
     <div class="train" data-train-id={props.train}>
       <div class="toggle" role="button" onClick={() => setExpanded((e) => !e)}>
-        {expanded() ? "▼" : "►"}
-        {" "}
+        {expanded() ? "▼ " : "► "}
         {language().formatSeconds((now().valueOf() - eta()) / 1e3 | 0)}
       </div>
 
-      <ErrorBoundary fallback={(e) => <span class="error">{`${e?.message ?? e}`}</span>}>
+      <ErrorBoundary fallback={errorHandler(congestion)}>
         <div class="cars">
           <For each={congestion()}>
             {({ car, value, label }, index) => (
@@ -123,7 +138,10 @@ function TrainsByDirection(props: { trains: readonly Train[] }) {
     const groupedTrains: Record<string, Train[]> = {};
 
     for (const train of props.trains) {
-      (groupedTrains[train.lineName] ??= []).push(train);
+      if (/^[1-8]/.test(train.line)) {
+        // Skip trains outside of line 1-8 since there is no congestion data for them.
+        (groupedTrains[train.lineName] ??= []).push(train);
+      }
     }
 
     const sortedGroups = Object.values(groupedTrains).sort((a, b) => {
@@ -177,7 +195,7 @@ function Station(props: { station: StationInfo }) {
     <div class="station">
       <h2>{props.station[language().id]}</h2>
 
-      <ErrorBoundary fallback={(e) => <span class="error">{`${e?.message ?? e}`}</span>}>
+      <ErrorBoundary fallback={errorHandler(trains)}>
         <TrainsByDirection trains={trains()} />
       </ErrorBoundary>
     </div>
