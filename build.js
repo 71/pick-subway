@@ -40,20 +40,36 @@ if (dev) {
 }
 
 async function prepareData() {
-  const token = process.env["SUBWAY_API_TOKEN"];
-
   // Fetch all data.
-  const [allStations, stationNames, elevators, lifts] = await Promise.all([
+  const [allStations, stationNames] = await Promise.all([
     async function () {
-      // Source: https://data.seoul.go.kr/dataList/OA-121/S/1/datasetView.do
       const resp = await fetch(
-        `http://openapi.seoul.go.kr:8088/${token}/json/SearchInfoBySubwayNameService/1/999//`,
+        "https://smss.seoulmetro.co.kr/api/1000.do?userPhone=010-0000-0000&osType=A&osVer=1&appVer=1&apdbVer=1&versionName=1&regId=0&model=A&market=G",
+        { method: "POST" },
       );
       const json = await resp.json();
-      /** @type {{ STATION_NM: string, LINE_NUM: string }[]} */
-      const rows = json.SearchInfoBySubwayNameService.row;
+      const stationsResp = await fetch(json.stationVerVO.downUrl);
+      const csv = await stationsResp.text();
 
-      return rows;
+      return csv.split("\r\n")
+        .filter((line) => line.length > 0)
+        .map((line) => line.split(","))
+        .map(([node, stationName, prevNode, nextNode,,, stationCode, lineCode, stationCodeEx, lat, lng,,, areaCode, downDoor,, stationNameEn]) => (
+          {
+            node: +node,
+            stationName,
+            stationNameEn,
+            areaCode,
+            lineCode: lineCode.split("◆"),
+            prevNode: prevNode.split("◆").map((x) => +x),
+            nextNode: nextNode.split("◆").map((x) => +x),
+            stationCode: stationCode.split("◆"),
+            stationCodeEx: stationCodeEx.split("◆"),
+            lat: lat.split("◆").map((x) => +x),
+            lng: lng.split("◆").map((x) => +x),
+            downDoor: downDoor.split("◆"),
+          }
+        ));
     }(),
     async function () {
       // Source: http://www.seoulmetro.co.kr/kr/board.do?menuIdx=551&bbsIdx=2208453
@@ -62,115 +78,134 @@ async function prepareData() {
 
       return rows;
     }(),
-    async function () {
-      // Source: https://data.seoul.go.kr/dataList/OA-21212/S/1/datasetView.do
-      const resp = await fetch(
-        `http://openapi.seoul.go.kr:8088/${token}/json/tbTraficElvtr/0/999/`,
-      );
-      const json = await resp.json();
-      /** @type {{ SW_NM: string, NODE_WKT: string }[]} */
-      const rows = json.tbTraficElvtr.row;
-
-      return rows;
-    }(),
-    async function () {
-      // Source: https://data.seoul.go.kr/dataList/OA-21211/S/1/datasetView.do
-      const resp = await fetch(
-        `http://openapi.seoul.go.kr:8088/${token}/json/tbTraficEntrcLft/0/999/`,
-      );
-      const json = await resp.json();
-      /** @type {{ SW_NM: string, NODE_WKT: string }[]} */
-      const rows = json.tbTraficEntrcLft.row;
-
-      return rows;
-    }(),
   ]);
 
   // Map station names to their translations, when available.
+  /** @type {Record<string, { ko: string, en: string, zh: string, ja: string }>} */
   const stationsToNames = Object.fromEntries(
     stationNames
       .slice(1)
-      .map(([_id, _line, ko, _hanja, en, ch, jp]) => [ko, { ko, en, ch, jp }]),
-  );
-
-  // Map stations to their coordinates, when available.
-  const stationsToCoords = Object.fromEntries(
-    Object.entries(
-      [...elevators, ...lifts]
-        .map(x => ({
-            station: x.SW_NM,
-            coords: [.../(\d+\.\d+) (\d+\.\d+)/.exec(x.NODE_WKT)].slice(1).map(x => +x),
-        }))
-        .filter(x => x.station.length > 0)
-        .reduce((acc, x) => ((acc[x.station] ??= []).push(x.coords), acc), {}),
-    ).map(([k, v]) => [k, {
-        lng: v.reduce((acc, y) => acc + y[0], 0) / v.length,
-        lat: v.reduce((acc, y) => acc + y[1], 0) / v.length,
-    }]),
+      .map(([_id, _line, ko, _hanja, en, zh, ja]) => [ko, { ko, en, zh, ja }]),
   );
 
   // Normalize names.
-  for (const obj of [stationsToCoords, stationsToNames]) {
-    // Some names have additional data associated with them not present in `allStations`,
-    // so we try to normalize it here.
-    for (const key in obj) {
-      const normalizedKey = /^\p{Script=Hangul}+/u.exec(key)?.[0] ?? key;
+  //
+  // Some names have additional data associated with them not present in `allStations`,
+  // so we try to normalize it here.
+  for (const key in stationsToNames) {
+    const normalizedKey = /^\p{Script=Hangul}+/u.exec(key)?.[0] ?? key;
 
-      if (!(normalizedKey in obj)) {
-        obj[normalizedKey] = obj[key];
-      }
+    if (!(normalizedKey in stationsToNames)) {
+      stationsToNames[normalizedKey] = stationsToNames[key];
     }
   }
 
-  // Dedup stations.
-  const dedupStations = Object.entries(
-    allStations
-      .reduce((acc, station) => ((acc[station.STATION_NM] ??= []).push(station.LINE_NUM), acc), {}),
-  ).sort((a, b) => a[0].localeCompare(b[0]));
+  const seoulStations = allStations.filter((x) => x.areaCode === "CA");
+  const seoulStationsByNode = Object.fromEntries(
+    seoulStations.map((station) => [station.node, station.stationName]),
+  );
+
+  // Filter out data outside of lines 1-8, the only ones which expose the data we need.
+  const supportedLines = [..."12345678"];
+  const supportedLinesMap = Object.fromEntries(supportedLines.map((line) => [line, true]));
+
+  const finalStations = seoulStations
+    .flatMap((station) => {
+      // Find full station name and translations.
+      const id = station.stationName;
+      const ko = stationsToNames[id]?.ko ?? station.stationName;
+      const en = stationsToNames[id]?.en ?? station.stationNameEn;
+      const zh = stationsToNames[id]?.zh ?? en;
+      const ja = stationsToNames[id]?.ja ?? en;
+
+      // Compute average of all positions.
+      const lat = station.lat.reduce((acc, v) => acc + v) / station.lat.length;
+      const lng = station.lng.reduce((acc, v) => acc + v) / station.lng.length;
+
+      // Merge line-dependent values into single objects, filtering out lines that are not
+      // supported.
+
+      /** @type {Record<number, { prevStation?: string, nextStation?: string }>} */
+      const lines = {};
+
+      for (let i = 0; i < station.lineCode.length; i++) {
+        const lineCode = station.lineCode[i];
+
+        if (!(lineCode in supportedLinesMap)) {
+          continue;
+        }
+
+        const prevNode = station.prevNode[i];
+        const nextNode = station.nextNode[i];
+        const prevStation = prevNode === -1 ? undefined : seoulStationsByNode[prevNode];
+        const nextStation = nextNode === -1 ? undefined : seoulStationsByNode[nextNode];
+
+        lines[+lineCode] = { prevStation, nextStation };
+      }
+
+      if (Object.keys(lines).length === 0) {
+        return [];
+      }
+
+      return {
+        id,
+        ko,
+        en,
+        zh,
+        ja,
+
+        lat,
+        lng,
+
+        lines,
+      };
+    });
 
   // Write output.
   const outHandle = await fs.open("src/data.ts", "w");
   const outStream = outHandle.createWriteStream();
 
-  try {
-    outStream.write(`
+  outStream.write(`\
+export const supportedLines = ${JSON.stringify(supportedLinesMap, undefined, 2)} as const;
+
+export type SupportedLine = keyof typeof supportedLines;
+export type StationId = string;
+
 export interface StationInfo {
-  readonly id: string;
-  readonly lines: readonly string[];
+  readonly id: StationId;
+
+  readonly lng: number;
+  readonly lat: number;
 
   readonly ko: string;
-  readonly en?: string;
-  readonly ch?: string;
-  readonly jp?: string;
+  readonly en: string;
+  readonly zh: string;
+  readonly ja: string;
 
-  readonly coords?: {
-    readonly lng: number;
-    readonly lat: number;
+  readonly lines: {
+    [Line in SupportedLine]?: {
+      readonly prevStation?: StationId;
+      readonly nextStation?: StationId;
+    };
   };
 }
 
 export const stations: readonly StationInfo[] = Object.freeze([`);
 
-    for (const [station, rawLines] of dedupStations) {
-      const id = station;
-      const lines = rawLines
-        .map((line) => line.replace(/^0/, ""))
-        .filter((line) => /^[1-8]호선$/.test(line))
-        .sort();
-      // ^ TODO: add support for more lines
-
-      if (lines.length === 0) {
-        continue;
-      }
-
-      const { ko = station, en, ch, jp } = stationsToNames[station] ?? {};
-      const coords = stationsToCoords[station];
-
-      outStream.write(`\n  ${JSON.stringify({ id, lines, ko, en, ch, jp, coords })},`);
-    }
-
-    outStream.write("\n]);\n");
-  } finally {
-    outStream.close();
+  for (const station of finalStations) {
+    outStream.write(`\n  ${JSON.stringify(station)},`);
   }
+
+  outStream.write(`
+]);
+
+export const stationsById: {
+  readonly [stationId: StationId]: StationInfo;
+} = Object.freeze(
+  Object.fromEntries(
+    stations.map((station) => [station.id, station]),
+  ),
+);
+`);
+  outStream.close();
 }

@@ -1,5 +1,5 @@
 import { Accessor, ErrorBoundary, For, Match, Resource, Show, Switch, createContext, createEffect, createMemo, createResource, createSignal, onCleanup, useContext } from "solid-js";
-import { StationInfo, stations } from "./data";
+import { StationInfo, SupportedLine, stations, stationsById } from "./data";
 import "./App.css";
 
 interface Language {
@@ -16,6 +16,8 @@ interface Train {
   readonly line: string;
   readonly lineName: string;
   readonly train: string;
+  readonly destination?: string;
+  readonly nextStation?: string;
 }
 
 const languages: readonly Language[] = [
@@ -35,6 +37,18 @@ const languages: readonly Language[] = [
 const languagesById = Object.fromEntries(
   languages.map((l) => [l.id, l]),
 ) as Record<Language["id"], Language>;
+
+const lineColors = {
+  1: "#263F93",
+  2: "#41B353",
+  3: "#EF6C1D",
+  4: "#2FA0DB",
+  5: "#883FDB",
+  6: "#B44F19",
+  7: "#697121",
+  8: "#E31F6D",
+  9: "#D1A43C",
+};
 
 function useNow() {
   const [now, setNow] = createSignal(new Date());
@@ -133,7 +147,10 @@ function Train(props: { line: string, lineName: string, train: string, eta: numb
   );
 }
 
-function TrainsByDirection(props: { trains: readonly Train[] }) {
+function TrainsByDirection(props: { station: StationInfo, trains: readonly Train[] }) {
+  const language = useContext(LanguageContext)!;
+  const setCurrentStation = useContext(SetCurrentStationContext)!;
+
   const sortedGroupedTrains = createMemo(() => {
     const groupedTrains: Record<string, Train[]> = {};
 
@@ -164,15 +181,48 @@ function TrainsByDirection(props: { trains: readonly Train[] }) {
     return sortedGroups;
   });
 
+  const previousStation = createMemo(() => {
+    const station = stationsById[props.station.id];
+
+    return (lineNb: SupportedLine, nextStation: string) => {
+      const line = station.lines[lineNb];
+
+      return line?.nextStation === nextStation ? line.prevStation
+           : line?.prevStation === nextStation ? line.nextStation
+           : undefined;
+    };
+  });
+
+  const stationName = (stationId: string) => stationsById[stationId]?.[language().id] ?? stationId;
+
   return (
     <div class="trains">
       <For each={sortedGroupedTrains()}>
         {(trains) => (
-          <div class="group">
-            <h3>
+          <div class="group" style={`--line-accent: ${lineColors[trains[0].line as SupportedLine]}`}>
+            <h2>
               <span class="line">{trains[0].line}</span>
-              {trains[0].lineName}
-            </h3>
+
+              <Show when={trains[0].destination !== undefined} fallback={trains[0].lineName}>
+                <Show when={previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!) !== undefined}>
+                  <span class="previous" onClick={
+                    [setCurrentStation, stationsById[previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!)!]]
+                  }>
+                    {stationName(previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!)!)}
+                  </span>
+                  <span class="sep">›</span>
+                </Show>
+                <span class="current">{props.station[language().id]}</span>
+                <span class="sep">›</span>
+                <span class="next" onClick={[setCurrentStation, stationsById[trains[0].nextStation!]]}>
+                  {stationName(trains[0].nextStation!)}
+                </span>
+                <Show when={trains[0].destination !== trains[0].nextStation}>
+                  <span class="sep">⋯</span>
+                  <span class="last">{stationName(trains[0].destination!)}</span>
+                </Show>
+              </Show>
+            </h2>
 
             <For each={trains}>
               {(train) => <Train {...train} />}
@@ -185,7 +235,6 @@ function TrainsByDirection(props: { trains: readonly Train[] }) {
 }
 
 function Station(props: { station: StationInfo }) {
-  const language = useContext(LanguageContext)!;
   const [trains, { refetch }] = createResource(() => props.station, fetchUpcomingTrains, { initialValue: [] });
   const interval = setInterval(() => refetch(), 30_000);
 
@@ -193,10 +242,8 @@ function Station(props: { station: StationInfo }) {
 
   return (
     <div class="station">
-      <h2>{props.station[language().id]}</h2>
-
       <ErrorBoundary fallback={errorHandler(trains)}>
-        <TrainsByDirection trains={trains()} />
+        <TrainsByDirection station={props.station} trains={trains()} />
       </ErrorBoundary>
     </div>
   );
@@ -213,6 +260,7 @@ const defaultLanguage = (savedId: string): Language => {
 };
 
 const LanguageContext = createContext<Accessor<Language>>();
+const SetCurrentStationContext = createContext<(station: StationInfo) => void>();
 
 function LanguagePicker(props: { language: Language, setLanguage(value: Language): void }) {
   return (
@@ -232,9 +280,6 @@ function LanguagePicker(props: { language: Language, setLanguage(value: Language
 function StationPicker(props: { searchInput: string, setSearchInput(value: string): void }) {
   const language = useContext(LanguageContext)!;
   const [coords] = createResource(() => new Promise<GeolocationCoordinates | undefined>((resolve, reject) => {
-    return resolve(undefined);
-
-    // TODO: add prompt for geolocation
     navigator.geolocation.getCurrentPosition((geolocation) => resolve(geolocation.coords), reject, {
       enableHighAccuracy: false,
       maximumAge: 60_000,
@@ -250,17 +295,14 @@ function StationPicker(props: { searchInput: string, setSearchInput(value: strin
     }
 
     const { latitude, longitude } = loadedCoords;
-    const distanceToCurrentLocation = (coords?: { lat: number, lng: number }) => {
-      if (coords === undefined) {
-        return 100;
-      }
-      return Math.sqrt(Math.pow(latitude - coords.lat, 2) + Math.pow(longitude - coords.lng, 2));
-    };
+    const distanceToCurrentLocation = (coords: { lat: number, lng: number }) => (
+      Math.sqrt(Math.pow(latitude - coords.lat, 2) + Math.pow(longitude - coords.lng, 2))
+    );
     const sortedStations = [...stations].filter((station) => station[prop] !== undefined);
 
     sortedStations.sort((a, b) => {
-      const aDistance = distanceToCurrentLocation(a.coords);
-      const bDistance = distanceToCurrentLocation(b.coords);
+      const aDistance = distanceToCurrentLocation(a);
+      const bDistance = distanceToCurrentLocation(b);
       if (aDistance !== bDistance) {
         return aDistance - bDistance;
       }
@@ -327,18 +369,24 @@ export function App() {
     setLanguage(newLanguage);
   };
 
+  const setCurrentStation = (station: StationInfo) => {
+    setSearchInput(station[language().id]);
+  };
+
   return (
     <LanguageContext.Provider value={language}>
-      <main>
-        <div class="input">
-          <StationPicker searchInput={searchInput()} setSearchInput={setSearchInput} />
-          <LanguagePicker language={language()} setLanguage={setLanguageKeepStation} />
-        </div>
+      <SetCurrentStationContext.Provider value={setCurrentStation}>
+        <main>
+          <div class="input">
+            <StationPicker searchInput={searchInput()} setSearchInput={setSearchInput} />
+            <LanguagePicker language={language()} setLanguage={setLanguageKeepStation} />
+          </div>
 
-        <Show when={selectedStation() !== undefined}>
-          <Station station={selectedStation()!} />
-        </Show>
-      </main>
+          <Show when={selectedStation() !== undefined}>
+            <Station station={selectedStation()!} />
+          </Show>
+        </main>
+      </SetCurrentStationContext.Provider>
     </LanguageContext.Provider>
   );
 }

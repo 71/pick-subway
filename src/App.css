@@ -29,14 +29,36 @@ main {
 }
 
 .trains {
-  .line {
+  & .line {
     border-radius: .2em;
     border: 2px solid currentColor;
     padding: 0 .25em;
     margin-right: .4em;
+    color: var(--line-accent);
   }
 
-  .train .toggle {
+  & .sep, & .previous {
+    color: rgb(52, 52, 52);
+  }
+
+  & .sep {
+    margin: 0 .4em;
+    color: var(--line-accent);
+  }
+
+  & h2 {
+    font-weight: normal;
+  }
+
+  & .previous, & .next {
+    cursor: pointer;
+  }
+
+  & .current {
+    font-weight: bold;
+  }
+
+  & .train .toggle {
     font-size: 1.2em;
     cursor: pointer;
   }
