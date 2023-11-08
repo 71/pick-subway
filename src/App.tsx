@@ -25,13 +25,13 @@ const languages: readonly Language[] = [
     id: "ko",
     display: "한국어",
     congestionLabels: ["여유", "보통", "주의", "혼잡"],
-    formatSeconds: (secs) => `${secs}초`,
+    formatSeconds: (secs) => Math.abs(secs) > 90 ? `${secs / 60 | 0}분 ${Math.abs(secs % 60)}초` : `${secs}초`,
   },
   {
     id: "en",
     display: "English",
     congestionLabels: ["Comfortable", "Average", "Almost packed", "Packed"],
-    formatSeconds: (secs) => `${secs}s`,
+    formatSeconds: (secs) => Math.abs(secs) > 90 ? `${secs / 60 | 0}m ${Math.abs(secs % 60)}s` : `${secs}s`,
   },
 ];
 const languagesById = Object.fromEntries(
@@ -111,7 +111,7 @@ function Train(props: { line: string, lineName: string, train: string, eta: numb
     <div class="train" data-train-id={props.train}>
       <div class="toggle" role="button" onClick={() => setExpanded((e) => !e)}>
         {expanded() ? "▼ " : "► "}
-        {language().formatSeconds((now().valueOf() - eta()) / 1e3 | 0)}
+        {language().formatSeconds((eta() - now().valueOf()) / 1e3 | 0)}
       </div>
 
       <ErrorBoundary fallback={errorHandler(congestion)}>
@@ -200,29 +200,34 @@ function TrainsByDirection(props: { station: StationInfo, trains: readonly Train
       <For each={sortedGroupedTrains()}>
         {(trains) => (
           <div class="group" style={`--line-accent: ${lineColors[trains[0].line as SupportedLine]}`}>
-            <h2>
-              <span class="line">{trains[0].line}</span>
+            <div class="header">
+              <h1>
+                <span class="line">{trains[0].line}</span>
+              </h1>
 
-              <Show when={trains[0].destination !== undefined} fallback={trains[0].lineName}>
-                <Show when={previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!) !== undefined}>
-                  <span class="previous" onClick={
-                    [setCurrentStation, stationsById[previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!)!]]
-                  }>
-                    {stationName(previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!)!)}
-                  </span>
+              <h2>
+                <Show when={trains[0].destination !== undefined} fallback={trains[0].lineName}>
+                  <Show when={previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!) !== undefined}>
+                    <span class="previous" onClick={
+                      [setCurrentStation, stationsById[previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!)!]]
+                    }>
+                      {stationName(previousStation()(trains[0].line as SupportedLine, trains[0].nextStation!)!)}
+                    </span>
+                    <span class="sep">›</span>
+                    <br />
+                  </Show>
+                  <span class="current" title={trains[0].lineName}>{props.station[language().id]}</span>
                   <span class="sep">›</span>
+                  <span class="next" onClick={[setCurrentStation, stationsById[trains[0].nextStation!]]}>
+                    {stationName(trains[0].nextStation!)}
+                  </span>
+                  <Show when={trains[0].destination !== trains[0].nextStation}>
+                    <span class="sep">⋯</span>
+                    <span class="last">{stationName(trains[0].destination!)}</span>
+                  </Show>
                 </Show>
-                <span class="current">{props.station[language().id]}</span>
-                <span class="sep">›</span>
-                <span class="next" onClick={[setCurrentStation, stationsById[trains[0].nextStation!]]}>
-                  {stationName(trains[0].nextStation!)}
-                </span>
-                <Show when={trains[0].destination !== trains[0].nextStation}>
-                  <span class="sep">⋯</span>
-                  <span class="last">{stationName(trains[0].destination!)}</span>
-                </Show>
-              </Show>
-            </h2>
+              </h2>
+            </div>
 
             <For each={trains}>
               {(train) => <Train {...train} />}

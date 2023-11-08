@@ -10,20 +10,33 @@ main {
 
 .input {
   display: flex;
+  align-items: center;
 
   & .section-picker {
     flex: 1;
+
+    & input {
+      font-size: 1.2em;
+    }
   }
 
   & input[name=station] {
     width: 100%;
   }
 
-  & input[type=radio] {
+  & .language-picker input[type=radio] {
     display: none;
+
+    &:checked + label {
+      font-weight: bold;
+    }
+
+    &:not(:checked) + label {
+      cursor: pointer;
+    }
   }
 
-  & label {
+  & .language-picker label {
     margin-left: 1em;
   }
 }
@@ -31,36 +44,50 @@ main {
 .trains {
   & .line {
     border-radius: .2em;
-    border: 2px solid currentColor;
+    border: 2px solid var(--line-accent);
     padding: 0 .25em;
     margin-right: .4em;
-    color: var(--line-accent);
-  }
-
-  & .sep, & .previous {
-    color: rgb(52, 52, 52);
-  }
-
-  & .sep {
-    margin: 0 .4em;
-    color: var(--line-accent);
   }
 
   & h2 {
     font-weight: normal;
   }
 
-  & .previous, & .next {
-    cursor: pointer;
-  }
-
-  & .current {
-    font-weight: bold;
-  }
-
   & .train .toggle {
     font-size: 1.2em;
     cursor: pointer;
+  }
+
+  & .group .header {
+    display: flex;
+    align-items: center;
+
+    & h2 {
+      margin-top: .6em;
+      overflow: auto;
+      text-wrap: nowrap;
+    }
+
+    & .current {
+      font-weight: bold;
+    }
+
+    & .previous {
+      color: #5d5d5d;
+    }
+
+    & .previous, & .previous + .sep {
+      font-size: .7em;
+    }
+
+    & .sep {
+      margin: 0 .4em;
+      color: var(--line-accent);
+    }
+
+    & .previous, & .next {
+      cursor: pointer;
+    }
   }
 }
 
