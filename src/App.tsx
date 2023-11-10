@@ -310,8 +310,8 @@ function Train(
         {timeDisplay()}
       </div>
 
-      <div class="content">
-        <Show when={expanded()}>
+      <Show when={expanded()}>
+        <div class="content">
           <div class="cars">
             <For
               each={congestion()}
@@ -340,8 +340,8 @@ function Train(
           </div>
 
           <ErrorMessage message={congestionError()} />
-        </Show>
-      </div>
+        </div>
+      </Show>
     </div>
   );
 }

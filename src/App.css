@@ -61,6 +61,7 @@ main {
       border-left: solid 2px var(--line-accent);
       margin: 0 1.14em;
       margin-top: -0.4em;
+      padding: .6em 0 .3em 0;
     }
   }
 
