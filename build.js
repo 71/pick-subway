@@ -10,6 +10,7 @@ const dev = process.argv.includes("--dev");
 const config = {
   entryPoints: ["src/index.ts"],
   format: "esm",
+  target: "chrome110",
   bundle: true,
   outdir: "dist",
   plugins: [
@@ -54,7 +55,27 @@ async function prepareData() {
       return csv.split("\r\n")
         .filter((line) => line.length > 0)
         .map((line) => line.split(","))
-        .map(([node, stationName, prevNode, nextNode,,, stationCode, lineCode, stationCodeEx, lat, lng,,, areaCode, downDoor,, stationNameEn]) => (
+        .map((
+          [
+            node,
+            stationName,
+            prevNode,
+            nextNode,
+            ,
+            ,
+            stationCode,
+            lineCode,
+            stationCodeEx,
+            lat,
+            lng,
+            ,
+            ,
+            areaCode,
+            downDoor,
+            ,
+            stationNameEn,
+          ],
+        ) => (
           {
             node: +node,
             stationName,
@@ -73,7 +94,9 @@ async function prepareData() {
     }(),
     async function () {
       // Source: http://www.seoulmetro.co.kr/kr/board.do?menuIdx=551&bbsIdx=2208453
-      const resp = await fetch("http://www.seoulmetro.co.kr/boardFileDown.do?file_idx=17209");
+      const resp = await fetch(
+        "http://www.seoulmetro.co.kr/boardFileDown.do?file_idx=17209",
+      );
       const rows = await readXlsxFile(Buffer.from(await resp.arrayBuffer()));
 
       return rows;
@@ -105,9 +128,13 @@ async function prepareData() {
     seoulStations.map((station) => [station.node, station.stationName]),
   );
 
-  // Filter out data outside of lines 1-8, the only ones which expose the data we need.
-  const supportedLines = [..."12345678"];
-  const supportedLinesMap = Object.fromEntries(supportedLines.map((line) => [line, true]));
+  // Filter out data outside of lines 1-9, the only ones which expose the data we need.
+  //
+  // Line 9 doesn't expose the data we need, but we keep it for consistency.
+  const supportedLines = [..."123456789"];
+  const supportedLinesMap = Object.fromEntries(
+    supportedLines.map((line) => [line, true]),
+  );
 
   const finalStations = seoulStations
     .flatMap((station) => {
@@ -137,8 +164,12 @@ async function prepareData() {
 
         const prevNode = station.prevNode[i];
         const nextNode = station.nextNode[i];
-        const prevStation = prevNode === -1 ? undefined : seoulStationsByNode[prevNode];
-        const nextStation = nextNode === -1 ? undefined : seoulStationsByNode[nextNode];
+        const prevStation = prevNode === -1
+          ? undefined
+          : seoulStationsByNode[prevNode];
+        const nextStation = nextNode === -1
+          ? undefined
+          : seoulStationsByNode[nextNode];
 
         lines[+lineCode] = { prevStation, nextStation };
       }
@@ -166,7 +197,9 @@ async function prepareData() {
   const outStream = outHandle.createWriteStream();
 
   outStream.write(`\
-export const supportedLines = ${JSON.stringify(supportedLinesMap, undefined, 2)} as const;
+export const supportedLines = ${
+    JSON.stringify(supportedLinesMap, undefined, 2)
+  } as const;
 
 export type SupportedLine = keyof typeof supportedLines;
 export type StationId = string;

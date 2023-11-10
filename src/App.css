@@ -5,6 +5,7 @@ main {
 }
 
 .error {
+  text-align: center;
   color: #a92507;
 }
 
@@ -27,11 +28,11 @@ main {
   & .language-picker input[type=radio] {
     display: none;
 
-    &:checked + label {
+    &:checked+label {
       font-weight: bold;
     }
 
-    &:not(:checked) + label {
+    &:not(:checked)+label {
       cursor: pointer;
     }
   }
@@ -53,9 +54,26 @@ main {
     font-weight: normal;
   }
 
+  & .train {
+    margin-bottom: .6em;
+
+    & .content {
+      border-left: solid 2px var(--line-accent);
+      margin: 0 1.14em;
+      margin-top: -0.4em;
+    }
+  }
+
   & .train .toggle {
     font-size: 1.2em;
     cursor: pointer;
+    margin-left: .55em;
+    font-variant-numeric: tabular-nums;
+
+    &>.bullet {
+      margin-right: .4em;
+      color: var(--line-accent);
+    }
   }
 
   & .group .header {
@@ -76,7 +94,8 @@ main {
       color: #5d5d5d;
     }
 
-    & .previous, & .previous + .sep {
+    & .previous,
+    & .previous+.sep {
       font-size: .7em;
     }
 
@@ -85,35 +104,80 @@ main {
       color: var(--line-accent);
     }
 
-    & .previous, & .next {
+    & .previous,
+    & .next {
       cursor: pointer;
     }
   }
 }
 
 .cars {
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
 
   & .car {
     display: inline-block;
     margin: .2em;
+    text-align: center;
+
+    /* English labels do not fit with the regular style,
+       make the icons bigger and the text smaller. */
+    main[lang=en] &>span {
+      font-size: .6em;
+    }
 
     & .icon {
       color: white;
 
-      & svg, & .car-number {
+      main[lang=en] & {
+        margin-bottom: -0.2em;
+      }
+
+      & svg,
+      & .car-number {
         width: 3em;
+
+        main[lang=en] & {
+          width: 4em;
+        }
       }
 
       & .car-number {
         position: absolute;
-        margin-top: 0.15em;
+        margin-top: .15em;
+
+        main[lang=en] & {
+          margin-top: .4em;
+        }
       }
 
-      &.v0 path { fill: #09d105; }
-      &.v1 path { fill: #c6c612; }
-      &.v2 path { fill: #e3270e; }
-      &.v3 path { fill: #0f0f0f; }
+      &.v0 path {
+        fill: #0939c6;
+      }
+
+      &.v1 path {
+        fill: #13b860;
+      }
+
+      &.v2 path {
+        fill: #af9d13;
+      }
+
+      &.v3 path {
+        fill: #b90d0d;
+      }
+
+      &.ve path {
+        fill: #b1b1b1;
+      }
     }
+  }
+
+  & .text-icon {
+    font-size: 1.4em;
+    margin: 0 .3em;
+    color: #878787;
+    line-height: 1.3;
   }
 }
