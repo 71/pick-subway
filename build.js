@@ -42,6 +42,10 @@ if (dev) {
 
 async function prepareData() {
   // Fetch all data.
+  const stationNameFixes = {
+    "신촌(지하)": "신촌",
+  };
+
   const [allStations, stationNames] = await Promise.all([
     async function () {
       const resp = await fetch(
@@ -78,7 +82,7 @@ async function prepareData() {
         ) => (
           {
             node: +node,
-            stationName,
+            stationName: stationNameFixes[stationName] ?? stationName,
             stationNameEn,
             areaCode,
             lineCode: lineCode.split("◆"),
